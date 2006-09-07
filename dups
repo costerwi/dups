@@ -1,0 +1,400 @@
+#!/bin/sh
+
+# This is a Bourne shell script wrapper surrounding a postscript program
+# which graphically displays file space usage.
+#
+# Usage: dups [DU OPTIONS] > output.ps
+
+cat <<HEADER
+%!PS-Adobe-3.0
+% 
+% Graphical display of disk usage with postscript.
+%
+% This is a postscript program which parses the output from the unix du program
+% to produce either a pie or stacked bar chart summary.
+%
+% Carl Osterwisch <osterwischc@asme.org>, 2005
+%
+currentfile
+<< /Filter /SubFileDecode
+    /DecodeParms << /EODCount 0 /EODString (*EOD*) >>
+>> /ReusableStreamDecode
+%% Place raw output from du command between the word filter and *EOD*, below
+filter
+HEADER
+
+# Run du with all arguments passed
+du $@
+
+cat <<MAINPRG
+*EOD*
+% (du.dat) (r) file
+
+%
+% Function: Concatenates two strings together.
+% string1 string2 concat string
+/concat {
+    2 copy length exch length add  % find the length of the new.
+    string dup     % string1 string2 string string
+    4 2 roll       % string string string1 string2
+    2 index 0 3 index
+    % string string string1 string2 string 0 string1
+    putinterval    % stuff the first string in.
+    % string string string1 string2
+    exch length exch putinterval
+} bind def
+
+%
+% Function: Concatenates many strings together down to the stack mark
+% -mark- string1 string2 string3 concattomark string
+/concattomark {
+    counttomark dup 1 add copy
+    0 exch {
+        exch length add % find the total length
+    } repeat
+    dup string exch % create the blank string which will hold result
+    3 2 roll {
+        2 index length sub
+        2 copy
+        5 4 roll
+        putinterval % insert this string in the appropriate position
+    } repeat
+    pop % index
+    exch pop % mark
+} bind def
+
+
+%
+% Function: Convert size into human-readable format (e.g. 1.2K 234M 2.4G)
+% int hreadable string string
+/hreadable {
+    {
+        dup 1024 lt {
+            (b) exit
+        } if
+        1024 div
+        dup 1024 lt {
+            (K) exit
+        } if
+        1024 div
+        dup 1024 lt {
+            (M) exit
+        } if
+        1024 div
+        dup 1024 lt {
+            (G) exit
+        } if
+        1024 div
+        (T) exit
+    } loop
+   
+    exch 10 mul round 10 div
+    dup 10 lt
+    {
+        3 string cvs
+    } {
+        cvi dup log cvi 2 add string cvs
+    } ifelse
+    exch
+} bind def
+
+
+%
+% Function: Replace offending characters in a string
+/cleanup {
+    [ ( ) ({) (}) (\() (\)) ] % These are the illegal characters to look for
+    {
+        exch
+        {
+            dup dup
+            3 index search
+            {
+                length
+                3 1 roll pop pop
+                (_) putinterval % This is the replacement character
+            } {
+                pop pop exch pop exit
+            } ifelse
+        } loop
+    } forall
+} def
+
+
+% Function: Process the raw du output, storing it in the dict
+/readfile {
+    % Usage: dict file readfile
+    {
+        dup         % copy the file object
+        256 string  % create a buffer
+        readline    % read the next line
+        {
+            token
+            {
+                /size exch def  % size should be int
+                cleanup         % remove bad characters from full path name
+                {
+                    (.) anchorsearch
+                    { pop } { exit } ifelse
+                } loop
+                {
+                    ( ) anchorsearch
+                    { pop } { exit } ifelse
+                } loop 
+                /leaf 3 index def  % start searching at the root of the dict
+                {
+                    (/) search       % pop next dir name from full path
+                    {
+                        /dirname exch def
+                        leaf dirname known not { leaf dirname 2 dict put } if % add it if it's not already there
+                        leaf dirname get /leaf exch def   % follow this branch
+                        pop % (/)
+                    } {  % finally, store the size under the key (/)
+                        /dirname exch def
+                        leaf dirname known not { leaf dirname 2 dict put } if % add it if it's not already there
+                        leaf dirname get /leaf exch def   % follow this branch
+                        leaf (/) size put exit
+                    } ifelse
+                } loop
+            } if    % there is a size--evaluate the rest
+        } { 
+            pop closefile exit 
+        } ifelse
+    } loop
+} bind def
+
+
+/gettotal {
+    % Make sure the parents have the sum of their children.
+    % Usage: dict gettotal
+    % Returns: The total of the dict
+    dup
+    (/) known
+    { % Entry for total exists--just retrive it
+        (/) get
+    } {
+        dup
+        0 exch
+        {
+            exch pop 
+            gettotal
+            add
+        } forall
+        dup 3 1 roll    % Keep a copy of the total on the stack
+        (/) exch put    % Define the dict entry
+    } ifelse
+} def
+
+
+
+/printdict {
+    % Dump the dict to stdout
+    % Usage: 0 -dict- { printdict } forall
+
+    % lvl key value
+    2 index { (\t) print } repeat
+    exch dup length string cvs print 
+    % lvl value
+    dup type /dicttype eq
+    { 
+        (\n) print
+        1 index 1 add exch 
+        { printdict } forall
+        % lvl lvl2
+        pop
+    } {
+        (=) print
+        ==
+    } ifelse
+} def
+
+
+/usagepie {
+    % Usage: R1 -dict- { usagepie } forall
+    dup type /dicttype eq 
+    {
+        % R1 /key -valuedict-
+        dup 3 1 roll
+        (/) get angscale mul  % pie slice in degrees
+        % R1 -valuedict- /key ang
+        dup 4 1 roll
+        % R1 ang -valuedict- /key ang
+
+        newpath
+        4 index
+        % R1 ang -valuedict- /key ang R1
+        2 copy exch 0 exch 0 0 5 2 roll arc
+        2 copy 
+        72 add 2 copy
+        exch 0 0 0 5 2 roll arcn
+        closepath
+        % R1 ang -valuedict- /key ang R1 ang R2
+        fillshapes { gsave fill grestore } if
+        gsave
+            0 setgray stroke % outline
+
+            dup 7 1 roll
+            % R1 ang R2 -valuedict- /key ang R1 ang R2
+        
+            % Calculate arc length at R2 in points
+            1.74533e-2 mul mul
+            10 ge {
+                exch 2 div rotate % center
+                
+                % R1 ang R2 -valuedict- /key R1
+                -5 moveto
+               
+                mark exch dup length string cvs
+                % R1 ang R2 -valuedict- -mark- (key)
+                (, ) 3 index (/) get 1024 mul hreadable
+                concattomark show stroke % label
+            } { 
+                % R1 ang R2 -valuedict- /key ang R1
+                pop pop pop
+            } ifelse
+        grestore
+
+        % R1 ang R2 -valuedict-
+        gsave
+            currentgray graytarget add 2 div setgray % adjust gray
+            { usagepie } forall % plot children
+        grestore
+
+        pop         % pop the child level
+        rotate
+    } { % Special case--don't plot non-dicts
+        pop % value
+        pop % key
+    } ifelse
+} bind def
+
+
+/usagebar {
+    % Usage: dict { usagebar } forall
+    dup type /dicttype eq
+    {
+        % /key -valuedict-
+        dup 3 1 roll
+        (/) get barscale mul  % bar height in points
+        % -valuedict- key size
+        dup 4 1 roll
+        % size -valuedict- key size
+
+        dup 0 0 72 4 3 roll
+        fillshapes { 4 copy rectfill } if
+
+        gsave
+            0 setgray rectstroke % outline
+            % size -valuedict- /key size
+            dup 10 ge {
+                dup 2 div 5 exch translate % center
+                % size -valuedict- /key size
+                exch dup length string cvs mark exch
+                % size -valuedict- size mark (key)
+                3 2 roll
+                % size -valuedict- mark (key) size
+                20 ge { % two-line label
+                    0 0 moveto show
+                    0 -10 moveto
+                } { % one-line label
+                    0 -5 moveto
+                    (, )
+                } ifelse
+                counttomark 1 add index (/) get 1024 mul hreadable concattomark show stroke
+            } { % no label
+                pop pop
+            } ifelse
+        grestore
+
+        gsave
+            72 0 translate
+            currentgray graytarget add 2 div setgray % adjust gray
+            { usagebar } forall % plot children
+        grestore
+
+        0 exch translate
+    } { % Special case--don't plot non-dicts
+        pop % value
+        pop % key
+    } ifelse
+} bind def
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Main program begins here
+%
+
+gsave           % Save the current graphics state
+10 dict exch    % Initialize the dict which will hold du data
+readfile        % Read the file which should be on the stack
+/dudata exch def
+
+/Times-Roman findfont
+10 scalefont
+setfont
+gsave
+
+% Should the graph be shaded?
+/fillshapes true def
+
+% Initial preferences
+.95 setgray         % Brightness of root-level shading
+/graytarget .7 def  % Brightness of final leaf
+0.2 setlinewidth    % Line width in 1/72"
+
+% Plot pie (true) or bar (false)
+false
+{
+    clippath pathbbox 
+    % llx lly urx ury
+    3 2 roll
+    add 2 div
+    3 1 roll
+    add 2 div
+    exch translate
+
+    dudata gettotal
+    360 exch div /angscale exch def % calculate degrees/kb
+
+    180 rotate
+    0   % level
+    dudata { usagepie } forall
+    pop % level
+} {
+    72 72 translate  % left and bottom margins
+    
+    clippath pathbbox
+    % llx lly urx ury
+    4 2 roll pop pop
+    72 sub dup % height - top margin
+    
+    dudata gettotal
+    div /barscale exch def % calculate vertical points/kb
+
+    exch 72 sub exch 0 0 4 2 roll rectclip % clip 1" from right
+
+    dudata { usagebar } forall
+} ifelse
+grestore
+
+% Header and footer
+MAINPRG
+
+# Generate reasonable header/footer
+echo "("$HOSTNAME":"$PWD") ("`date`") ("$0 $@")"
+
+cat <<TRAILER
+
+% Show footer
+currentfont 0.8 scalefont setfont
+72 50 moveto show
+dup stringwidth pop neg % string width in points for rjust
+clippath pathbbox 4 2 roll pop pop pop 72 sub add
+50 moveto show
+
+% Show header
+currentfont 2 scalefont setfont
+clippath pathbbox 4 1 roll pop pop 72 add exch 65 sub moveto
+show
+
+showpage
+grestore
+TRAILER
