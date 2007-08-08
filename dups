@@ -1,12 +1,24 @@
 #!/bin/sh
 
 # This is a Bourne shell script wrapper surrounding a postscript program
-# which graphically displays file space usage.
+# which graphically displays disk space usage.
 #
 # Usage: dups [DU OPTIONS] > output.ps
 
-cat <<HEADER
-%!PS-Adobe-3.0
+Title="${HOSTNAME}:${PWD}$ dups $@"
+Creator="dups 1.3"
+CreationDate="`date`"
+
+echo %!PS-Adobe-3.0
+echo %%Title: ${Title}
+echo %%Creator: ${Creator}
+echo %%CreationDate: ${CreationDate}
+echo %%For: ${USER}
+
+cat <<PSHEADER
+%%Pages: 1
+%%DocumentSuppliedResources: procset dupsUtility 1.0 1
+%%+ procset dupsPlot 1.0 1
 % 
 % Graphical display of disk usage with postscript.
 %
@@ -15,36 +27,9 @@ cat <<HEADER
 %
 % Carl Osterwisch <osterwischc@asme.org>, 2005
 %
-currentfile
-<< /Filter /SubFileDecode
-    /DecodeParms << /EODCount 0 /EODString (*EOD*) >>
->> /ReusableStreamDecode
-%% Place raw output from du command between the word filter and *EOD*, below
-filter
-HEADER
-
-# Run du with all arguments passed
-du $@
-
-cat <<MAINPRG
-*EOD*
-% (du.dat) (r) file
-
-%
-% Function: Concatenates two strings together.
-% string1 string2 concat string
-/concat {
-    2 copy length exch length add  % find the length of the new.
-    string dup     % string1 string2 string string
-    4 2 roll       % string string string1 string2
-    2 index 0 3 index
-    % string string string1 string2 string 0 string1
-    putinterval    % stuff the first string in.
-    % string string string1 string2
-    exch length exch putinterval
-} bind def
-
-%
+%%EndComments
+%%BeginProlog 
+%%BeginResource: procset dupsUtility 1.0 1
 % Function: Concatenates many strings together down to the stack mark
 % -mark- string1 string2 string3 concattomark string
 /concattomark {
@@ -63,32 +48,22 @@ cat <<MAINPRG
     exch pop % mark
 } bind def
 
-
-%
 % Function: Convert size into human-readable format (e.g. 1.2K 234M 2.4G)
 % int hreadable string string
 /hreadable {
+    [ (b) (K) (M) (G) (T) (P) (E) (Z) (Y) ]
     {
+        exch
         dup 1024 lt {
-            (b) exit
-        } if
-        1024 div
-        dup 1024 lt {
-            (K) exit
-        } if
-        1024 div
-        dup 1024 lt {
-            (M) exit
-        } if
-        1024 div
-        dup 1024 lt {
-            (G) exit
-        } if
-        1024 div
-        (T) exit
-    } loop
+            exit
+        } {
+            1024 div
+            exch
+            pop
+        } ifelse
+    } forall
    
-    exch 10 mul round 10 div
+    10 mul round 10 div
     dup 10 lt
     {
         3 string cvs
@@ -98,8 +73,6 @@ cat <<MAINPRG
     exch
 } bind def
 
-
-%
 % Function: Replace offending characters in a string
 /cleanup {
     [ ( ) ({) (}) (\() (\)) ] % These are the illegal characters to look for
@@ -118,7 +91,6 @@ cat <<MAINPRG
         } loop
     } forall
 } def
-
 
 % Function: Process the raw du output, storing it in the dict
 /readfile {
@@ -162,7 +134,6 @@ cat <<MAINPRG
     } loop
 } bind def
 
-
 /gettotal {
     % Make sure the parents have the sum of their children.
     % Usage: dict gettotal
@@ -184,30 +155,25 @@ cat <<MAINPRG
     } ifelse
 } def
 
-
-
 /printdict {
     % Dump the dict to stdout
     % Usage: 0 -dict- { printdict } forall
 
     % lvl key value
     2 index { (\t) print } repeat
-    exch dup length string cvs print 
-    % lvl value
+    exch dup length string cvs print % lvl value
     dup type /dicttype eq
     { 
         (\n) print
-        1 index 1 add exch 
-        { printdict } forall
-        % lvl lvl2
+        1 index 1 add exch { printdict } forall % lvl lvl2
         pop
     } {
         (=) print
         ==
     } ifelse
 } def
-
-
+%%EndResource
+%%BeginResource: procset dupsPlot 1.0 1
 /usagepie {
     % Usage: R1 -dict- { usagepie } forall
     dup type /dicttype eq 
@@ -216,24 +182,20 @@ cat <<MAINPRG
         dup 3 1 roll
         (/) get angscale mul  % pie slice in degrees
         % R1 -valuedict- /key ang
-        dup 4 1 roll
-        % R1 ang -valuedict- /key ang
+        dup 4 1 roll % R1 ang -valuedict- /key ang
 
         newpath
-        4 index
-        % R1 ang -valuedict- /key ang R1
+        4 index % R1 ang -valuedict- /key ang R1
         2 copy exch 0 exch 0 0 5 2 roll arc
         2 copy 
-        72 add 2 copy
+        barwidth add 2 copy
         exch 0 0 0 5 2 roll arcn
-        closepath
-        % R1 ang -valuedict- /key ang R1 ang R2
-        fillshapes { gsave fill grestore } if
+        closepath % R1 ang -valuedict- /key ang R1 ang R2
+        gsave fill grestore % fill the shape
         gsave
             0 setgray stroke % outline
 
-            dup 7 1 roll
-            % R1 ang R2 -valuedict- /key ang R1 ang R2
+            dup 7 1 roll % R1 ang R2 -valuedict- /key ang R1 ang R2
         
             % Calculate arc length at R2 in points
             1.74533e-2 mul mul
@@ -255,7 +217,7 @@ cat <<MAINPRG
 
         % R1 ang R2 -valuedict-
         gsave
-            currentgray graytarget add 2 div setgray % adjust gray
+            currentgray gradientEnd add 2 div setgray % adjust gray
             { usagepie } forall % plot children
         grestore
 
@@ -267,7 +229,6 @@ cat <<MAINPRG
     } ifelse
 } bind def
 
-
 /usagebar {
     % Usage: dict { usagebar } forall
     dup type /dicttype eq
@@ -276,11 +237,10 @@ cat <<MAINPRG
         dup 3 1 roll
         (/) get barscale mul  % bar height in points
         % -valuedict- key size
-        dup 4 1 roll
-        % size -valuedict- key size
+        dup 4 1 roll % size -valuedict- key size
 
-        dup 0 0 72 4 3 roll
-        fillshapes { 4 copy rectfill } if
+        dup 0 0 barwidth 4 3 roll
+        4 copy rectfill % fill the shape
 
         gsave
             0 setgray rectstroke % outline
@@ -306,8 +266,8 @@ cat <<MAINPRG
         grestore
 
         gsave
-            72 0 translate
-            currentgray graytarget add 2 div setgray % adjust gray
+            barwidth 0 translate
+            currentgray gradientEnd add 2 div setgray % adjust gray
             { usagebar } forall % plot children
         grestore
 
@@ -317,39 +277,47 @@ cat <<MAINPRG
         pop % key
     } ifelse
 } bind def
+%%EndResource
+%%EndProlog
+%%Page: 1 1
+%%BeginPageSetup
+save                % Save the current state
+/Times-Roman findfont 10 scalefont setfont % Default font
+/gradientStart .95 def % Brightness of root-level shading
+/gradientEnd .7 def % Brightness of final leaf
+/margin 72 def      % Page margin (1/72")
+/barwidth 72 def    % Width of each bar (1/72")
+%%EndPageSetup
+currentfile
+<< /Filter /SubFileDecode
+    /DecodeParms << /EODCount 0 /EODString (%%EndData) >>
+>> /ReusableStreamDecode
+%%BeginData: ASCII
+filter
+PSHEADER
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Main program begins here
-%
+# Run du with all arguments passed
+du $@
 
-gsave           % Save the current graphics state
+cat <<PSMAIN
+%%EndData
 10 dict exch    % Initialize the dict which will hold du data
 readfile        % Read the file which should be on the stack
 /dudata exch def
 
-/Times-Roman findfont
-10 scalefont
-setfont
 gsave
-
-% Should the graph be shaded?
-/fillshapes true def
-
-% Initial preferences
-.95 setgray         % Brightness of root-level shading
-/graytarget .7 def  % Brightness of final leaf
-0.2 setlinewidth    % Line width in 1/72"
+0.2 setlinewidth      % Line width in 1/72"
+gradientStart setgray % initial shade
 
 % Plot pie (true) or bar (false)
 false
 {
-    clippath pathbbox 
-    % llx lly urx ury
+    clippath pathbbox % llx lly urx ury
     3 2 roll
     add 2 div
     3 1 roll
     add 2 div
-    exch translate
+    exch translate  % find center of page
 
     dudata gettotal
     360 exch div /angscale exch def % calculate degrees/kb
@@ -360,9 +328,7 @@ false
     pop % level
 } {
     72 72 translate  % left and bottom margins
-    
-    clippath pathbbox
-    % llx lly urx ury
+    clippath pathbbox % llx lly urx ury
     4 2 roll pop pop
     72 sub dup % height - top margin
     
@@ -374,15 +340,15 @@ false
     dudata { usagebar } forall
 } ifelse
 grestore
+PSMAIN
 
-% Header and footer
-MAINPRG
+# Generate reasonable header/footer for the report
+echo % Header
+echo "("${Title}")"
+echo % Two-part footer
+echo "("${CreationDate}") ("${Creator}")"
 
-# Generate reasonable header/footer
-echo "("$HOSTNAME":"$PWD") ("`date`") ("$0 $@")"
-
-cat <<TRAILER
-
+cat <<PSEND
 % Show footer
 currentfont 0.8 scalefont setfont
 72 50 moveto show
@@ -392,9 +358,9 @@ clippath pathbbox 4 2 roll pop pop pop 72 sub add
 
 % Show header
 currentfont 2 scalefont setfont
-clippath pathbbox 4 1 roll pop pop 72 add exch 65 sub moveto
-show
+clippath pathbbox 4 1 roll pop pop 72 add exch 65 sub moveto show
 
+restore
 showpage
-grestore
-TRAILER
+%%EOF
+PSEND
