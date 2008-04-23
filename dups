@@ -297,7 +297,7 @@ filter
 PSHEADER
 
 # Run du with all arguments passed
-du $@
+du -k $@
 
 cat <<PSMAIN
 %%EndData
