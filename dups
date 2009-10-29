@@ -6,7 +6,7 @@
 # Usage: dups [DU OPTIONS] > output.ps
 
 Title="${HOSTNAME}:${PWD}$ dups $@"
-Creator="dups 1.3"
+Creator="dups 1.4"
 CreationDate="`date`"
 
 echo %!PS-Adobe-3.0
@@ -73,7 +73,7 @@ cat <<PSHEADER
     exch
 } bind def
 
-% Function: Replace offending characters in a string
+% Function: Replace offensive characters in a string
 /cleanup {
     [ ( ) ({) (}) (\() (\)) ] % These are the illegal characters to look for
     {
@@ -113,17 +113,19 @@ cat <<PSHEADER
                     { pop } { exit } ifelse
                 } loop 
                 /leaf 3 index def  % start searching at the root of the dict
+                (/) % search string
                 {
-                    (/) search       % pop next dir name from full path
+                    search       % pop next dir name from full path
                     {
                         /dirname exch def
                         leaf dirname known not { leaf dirname 2 dict put } if % add it if it's not already there
                         leaf dirname get /leaf exch def   % follow this branch
-                        pop % (/)
                     } {  % finally, store the size under the key (/)
                         /dirname exch def
-                        leaf dirname known not { leaf dirname 2 dict put } if % add it if it's not already there
-                        leaf dirname get /leaf exch def   % follow this branch
+                        dirname () eq not {  % ignore empty string caused by trailing /
+                            leaf dirname known not { leaf dirname 2 dict put } if
+                            leaf dirname get /leaf exch def   % follow this branch
+                        } if
                         leaf (/) size put exit
                     } ifelse
                 } loop
