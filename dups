@@ -6,7 +6,7 @@
 # Usage: dups [DU OPTIONS] > output.ps
 
 Title="${HOSTNAME}:${PWD}$ dups $@"
-Creator="dups 1.4"
+Creator="dups 1.5"
 CreationDate="`date`"
 
 echo %!PS-Adobe-3.0
@@ -95,32 +95,22 @@ cat <<PSHEADER
 % Function: Process the raw du output, storing it in the dict
 /readfile {
     % Usage: dict file readfile
+    % Return the dict on the stack
     {
         dup         % copy the file object
         256 string  % create a buffer
-        readline    % read the next line
-        {
-            token
-            {
-                /size exch def  % size should be int
+        readline {  % read the next line
+            token {
+                /size exch def  % size, should be int
                 cleanup         % remove bad characters from full path name
-                {
-                    (.) anchorsearch
-                    { pop } { exit } ifelse
-                } loop
-                {
-                    ( ) anchorsearch
-                    { pop } { exit } ifelse
-                } loop 
                 /leaf 3 index def  % start searching at the root of the dict
-                (/) % search string
+                (/) % directory separator search string
                 {
-                    search       % pop next dir name from full path
-                    {
+                    search {     % pop next dir name from full path
                         /dirname exch def
                         leaf dirname known not { leaf dirname 2 dict put } if % add it if it's not already there
                         leaf dirname get /leaf exch def   % follow this branch
-                    } {  % finally, store the size under the key (/)
+                    } {  % end of the branch, store the size in the key (/)
                         /dirname exch def
                         dirname () eq not {  % ignore empty string caused by trailing /
                             leaf dirname known not { leaf dirname 2 dict put } if
@@ -134,6 +124,25 @@ cat <<PSHEADER
             pop closefile exit 
         } ifelse
     } loop
+    %dup 0 exch { printdict } forall pop
+    {   % Skip up the trunk to find first child with more than one branch
+        dup 
+        dup length  % Number of children
+        1 gt exch { 
+            exch pop
+            dup length  % Number of grandchildren
+            1 gt exch (/) known or or
+        } forall
+        {
+            % Current dict has either more than one child 
+            % -or more than one grandchild
+            % -or a child with only size defined
+            exit
+        } {
+            % Should be only one child!
+            { exch pop } forall
+        } ifelse
+    } loop
 } bind def
 
 /gettotal {
@@ -141,8 +150,7 @@ cat <<PSHEADER
     % Usage: dict gettotal
     % Returns: The total of the dict
     dup
-    (/) known
-    { % Entry for total exists--just retrive it
+    (/) known { % Entry for total exists--just retrive it
         (/) get
     } {
         dup
@@ -164,8 +172,7 @@ cat <<PSHEADER
     % lvl key value
     2 index { (\t) print } repeat
     exch dup length string cvs print % lvl value
-    dup type /dicttype eq
-    { 
+    dup type /dicttype eq { 
         (\n) print
         1 index 1 add exch { printdict } forall % lvl lvl2
         pop
@@ -178,11 +185,10 @@ cat <<PSHEADER
 %%BeginResource: procset dupsPlot 1.0 1
 /usagepie {
     % Usage: R1 -dict- { usagepie } forall
-    dup type /dicttype eq 
-    {
+    dup type /dicttype eq {
         % R1 /key -valuedict-
         dup 3 1 roll
-        (/) get angscale mul  % pie slice in degrees
+        gettotal angscale mul  % pie slice in degrees
         % R1 -valuedict- /key ang
         dup 4 1 roll % R1 ang -valuedict- /key ang
 
@@ -201,7 +207,7 @@ cat <<PSHEADER
         
             % Calculate arc length at R2 in points
             1.74533e-2 mul mul
-            10 ge {
+            10 ge { % Show the label if there is enough room
                 exch 2 div rotate % center
                 
                 % R1 ang R2 -valuedict- /key R1
@@ -233,11 +239,10 @@ cat <<PSHEADER
 
 /usagebar {
     % Usage: dict { usagebar } forall
-    dup type /dicttype eq
-    {
+    dup type /dicttype eq {
         % /key -valuedict-
         dup 3 1 roll
-        (/) get barscale mul  % bar height in points
+        gettotal barscale mul  % bar height in points
         % -valuedict- key size
         dup 4 1 roll % size -valuedict- key size
 
@@ -290,12 +295,20 @@ save                % Save the current state
 /margin 72 def      % Page margin (1/72")
 /barwidth 72 def    % Width of each bar (1/72")
 %%EndPageSetup
+(ReusableStreamDecode) /Filter resourcestatus { %ifelse
+    pop pop % status size
+} {
+    (** Postscript level 3 or newer is required.\n) print
+    mark (** Current environment is postscript level ) 
+    languagelevel 3 string cvs (.\n) concattomark print
+} ifelse
+
 currentfile
 << /Filter /SubFileDecode
     /DecodeParms << /EODCount 0 /EODString (%%EndData) >>
 >> /ReusableStreamDecode
-%%BeginData: ASCII
 filter
+%%BeginData: ASCII
 PSHEADER
 
 # Run du with all arguments passed
