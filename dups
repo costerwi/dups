@@ -17,6 +17,7 @@ echo %%For: ${USER}
 
 cat <<PSHEADER
 %%Pages: 1
+%%LanguageLevel: 3
 %%DocumentSuppliedResources: procset dupsUtility 1.0 1
 %%+ procset dupsPlot 1.0 1
 % 
@@ -307,8 +308,8 @@ currentfile
 << /Filter /SubFileDecode
     /DecodeParms << /EODCount 0 /EODString (%%EndData) >>
 >> /ReusableStreamDecode
-filter
 %%BeginData: ASCII
+filter
 PSHEADER
 
 # Run du with all arguments passed
