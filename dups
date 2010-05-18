@@ -6,16 +6,15 @@
 # Usage: dups [DU OPTIONS] > output.ps
 
 Title="${HOSTNAME}:${PWD}$ dups $@"
-Creator="dups 1.5"
-CreationDate="`date`"
+CreationDate=`date`
+Creator="dups 1.6"
 
-echo %!PS-Adobe-3.0
-echo %%Title: ${Title}
-echo %%Creator: ${Creator}
-echo %%CreationDate: ${CreationDate}
-echo %%For: ${USER}
-
-cat <<PSHEADER
+cat <<PSFILE
+%!PS-Adobe-3.0
+%%Title: $Title
+%%Creator: $Creator
+%%CreationDate: $CreationDate
+%%For: $USER
 %%Pages: 1
 %%LanguageLevel: 3
 %%DocumentSuppliedResources: procset dupsUtility 1.0 1
@@ -27,6 +26,7 @@ cat <<PSHEADER
 % to produce either a pie or stacked bar chart summary.
 %
 % Carl Osterwisch <osterwischc@asme.org>, 2005
+% \$Id$
 %
 %%EndComments
 %%BeginProlog 
@@ -310,12 +310,7 @@ currentfile
 >> /ReusableStreamDecode
 %%BeginData: ASCII
 filter
-PSHEADER
-
-# Run du with all arguments passed
-du -k $@
-
-cat <<PSMAIN
+`du -k $@`
 %%EndData
 10 dict exch    % Initialize the dict which will hold du data
 readfile        % Read the file which should be on the stack
@@ -356,15 +351,11 @@ false
     dudata { usagebar } forall
 } ifelse
 grestore
-PSMAIN
 
-# Generate reasonable header/footer for the report
-echo % Header
-echo "("${Title}")"
-echo % Two-part footer
-echo "("${CreationDate}") ("${Creator}")"
+% Generate header/footer for the report
+($Title) % Header
+($CreationDate) ($Creator) % Two-part footer
 
-cat <<PSEND
 % Show footer
 currentfont 0.8 scalefont setfont
 72 50 moveto show
@@ -379,4 +370,4 @@ clippath pathbbox 4 1 roll pop pop 72 add exch 65 sub moveto show
 restore
 showpage
 %%EOF
-PSEND
+PSFILE
