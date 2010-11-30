@@ -7,7 +7,7 @@
 
 Title="${HOSTNAME}:${PWD}$ dups $@"
 CreationDate=`date`
-Creator="dups 1.6"
+Creator="dups 1.7"
 
 cat <<PSFILE
 %!PS-Adobe-3.0
@@ -25,7 +25,8 @@ cat <<PSFILE
 % This is a postscript program which parses the output from the unix du program
 % to produce either a pie or stacked bar chart summary.
 %
-% Carl Osterwisch <osterwischc@asme.org>, 2005
+% Carl Osterwisch, 2005
+% https://sourceforge.net/projects/showdups/
 % \$Id$
 %
 %%EndComments
