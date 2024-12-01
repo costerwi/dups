@@ -27,7 +27,7 @@ cat <<PSFILE
 % to produce either a pie or stacked bar chart summary.
 %
 % Carl Osterwisch, 2005
-% https://sourceforge.net/projects/showdups/
+% https://github.com/costerwi/dups/
 %
 %%EndComments
 %%BeginProlog
